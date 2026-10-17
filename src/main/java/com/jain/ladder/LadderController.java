@@ -40,8 +40,20 @@ public class LadderController {
     @GetMapping("/")
     public Map<String, Object> root() {
         return Map.of("service", "elo-ladder",
-                "endpoints", List.of("GET /health", "GET /players", "POST /players",
+                "endpoints", List.of("GET /health", "GET /stats", "GET /players", "POST /players",
                         "GET /ladder", "POST /matches"));
+    }
+
+    @GetMapping("/stats")
+    public Map<String, Object> stats() {
+        Integer totalPlayers = jdbc.queryForObject("SELECT COUNT(*) FROM players", Integer.class);
+        Integer totalMatches = jdbc.queryForObject("SELECT COUNT(*) FROM matches", Integer.class);
+        return Map.of(
+                "total_players", totalPlayers != null ? totalPlayers : 0,
+                "total_matches", totalMatches != null ? totalMatches : 0,
+                "provisional_threshold", Elo.PROVISIONAL_GAMES,
+                "starting_rating", Elo.STARTING_RATING
+        );
     }
 
     @GetMapping("/players")
