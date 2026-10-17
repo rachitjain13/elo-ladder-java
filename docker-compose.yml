@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: elo-db
+    environment:
+      POSTGRES_USER: ladder
+      POSTGRES_PASSWORD: ladderpassword
+      POSTGRES_DB: ladder
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Files mounted in docker-entrypoint-initdb.d are executed automatically in alphanumeric order!
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ladder -d ladder"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: elo-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    container_name: elo-app
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/ladder
+      DB_USER: ladder
+      DB_PASSWORD: ladderpassword
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
