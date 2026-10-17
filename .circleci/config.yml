@@ -26,7 +26,8 @@ jobs:
       - run:
           name: Secret Scanning with Gitleaks
           command: |
-            curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/scripts/install.sh | sh -s -- -b /tmp
+            curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.18.2/gitleaks_8.18.2_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
+            tar -xzf /tmp/gitleaks.tar.gz -C /tmp
             /tmp/gitleaks detect --verbose --redact
       # 2. Linting (Checkstyle / spotless / maven validate)
       - run:
