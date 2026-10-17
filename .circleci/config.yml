@@ -1,0 +1,104 @@
+version: 2.1
+
+executors:
+  test-executor:
+    docker:
+      - image: cimg/openjdk:17.0
+      - image: cimg/postgres:15.0
+        environment:
+          POSTGRES_USER: ladder
+          POSTGRES_PASSWORD: ladderpassword
+          POSTGRES_DB: ladder
+      - image: cimg/redis:7.0
+    environment:
+      DATABASE_URL: jdbc:postgresql://localhost:5432/ladder
+      DB_USER: ladder
+      DB_PASSWORD: ladderpassword
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+
+jobs:
+  test_pipeline:
+    executor: test-executor
+    steps:
+      - checkout
+      # 1. Secret Scanning (gitleaks)
+      - run:
+          name: Secret Scanning with Gitleaks
+          command: |
+            curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/scripts/install.sh | sh -s -- -b /tmp
+            /tmp/gitleaks detect --verbose --redact
+      # 2. Linting (Checkstyle / spotless / maven validate)
+      - run:
+          name: Lint / Verification
+          command: mvn -B validate
+      # 3. Apply database migrations to test database
+      - run:
+          name: Wait for Postgres and apply migrations
+          command: |
+            sudo apt-get update && sudo apt-get install -y postgresql-client
+            until pg_isready -h localhost -p 5432 -U ladder; do sleep 1; done
+            psql -h localhost -U ladder -d ladder -f migrations/001_create_tables.sql
+            psql -h localhost -U ladder -d ladder -f migrations/002_seed.sql
+      # 4. Unit & Integration Tests
+      - run:
+          name: Run Unit and Integration Tests
+          command: mvn -B test
+
+  build_and_push:
+    docker:
+      - image: cimg/base:current
+    parameters:
+      tag_name:
+        type: string
+    steps:
+      - checkout
+      - setup_remote_docker:
+          version: default
+      - run:
+          name: Build and Push Docker Image
+          command: |
+            SHORT_SHA=$(echo $CIRCLE_SHA1 | cut -c1-7)
+            IMAGE_NAME="$DOCKERHUB_USER/elo-ladder"
+            
+            echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USER" --password-stdin
+            
+            docker build -t $IMAGE_NAME:<< parameters.tag_name >> -t $IMAGE_NAME:<< parameters.tag_name >>-$SHORT_SHA .
+            
+            docker push $IMAGE_NAME:<< parameters.tag_name >>
+            docker push $IMAGE_NAME:<< parameters.tag_name >>-$SHORT_SHA
+
+workflows:
+  version: 2
+  qa_workflow:
+    jobs:
+      - test_pipeline:
+          filters:
+            branches:
+              only: main
+      - build_and_push:
+          name: build_and_push_qa
+          tag_name: "qa"
+          requires:
+            - test_pipeline
+          filters:
+            branches:
+              only: main
+
+  staging_workflow:
+    jobs:
+      - build_and_push:
+          name: build_and_push_stage
+          tag_name: "stage"
+          filters:
+            branches:
+              only: staging
+
+  prod_workflow:
+    jobs:
+      - build_and_push:
+          name: build_and_push_prod
+          tag_name: "prod"
+          filters:
+            branches:
+              only: prod
