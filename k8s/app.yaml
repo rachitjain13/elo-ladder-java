@@ -85,7 +85,7 @@ spec:
         - name: dockerhub
       containers:
         - name: elo-app
-          image: DOCKERHUB_USER_PLACEHOLDER/elo-ladder:IMAGE_TAG_PLACEHOLDER
+          image: rachitjain12/elo-ladder:qa
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
